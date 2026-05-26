@@ -1,0 +1,139 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Team {
+  id           Int              @id @default(autoincrement())
+  externalId   String           @unique @map("external_id")
+  name         String
+  abbreviation String
+  city         String
+  conference   String
+  division     String
+  createdAt    DateTime         @default(now()) @map("created_at")
+  updatedAt    DateTime         @updatedAt @map("updated_at")
+  players      Player[]
+  homeGames    Game[]           @relation("HomeTeam")
+  awayGames    Game[]           @relation("AwayTeam")
+  stats        PlayerGameStat[]
+
+  @@map("teams")
+}
+
+model Player {
+  id                 Int                 @id @default(autoincrement())
+  externalId         String              @unique @map("external_id")
+  firstName          String              @map("first_name")
+  lastName           String              @map("last_name")
+  fullName           String              @map("full_name")
+  position           String
+  teamId             Int                 @map("team_id")
+  height             String?
+  weight             Int?
+  birthDate          DateTime?           @map("birth_date")
+  active             Boolean             @default(true)
+  createdAt          DateTime            @default(now()) @map("created_at")
+  updatedAt          DateTime            @updatedAt @map("updated_at")
+  team               Team                @relation(fields: [teamId], references: [id])
+  stats              PlayerGameStat[]
+  liveEvents         LiveEvent[]
+  analyticsSnapshots AnalyticsSnapshot[]
+
+  @@index([teamId])
+  @@map("players")
+}
+
+model Game {
+  id                 Int                 @id @default(autoincrement())
+  externalId         String              @unique @map("external_id")
+  homeTeamId         Int                 @map("home_team_id")
+  awayTeamId         Int                 @map("away_team_id")
+  gameDate           DateTime            @map("game_date")
+  status             String
+  season             String
+  homeScore          Int                 @default(0) @map("home_score")
+  awayScore          Int                 @default(0) @map("away_score")
+  period             Int                 @default(0)
+  clock              String?
+  createdAt          DateTime            @default(now()) @map("created_at")
+  updatedAt          DateTime            @updatedAt @map("updated_at")
+  homeTeam           Team                @relation("HomeTeam", fields: [homeTeamId], references: [id])
+  awayTeam           Team                @relation("AwayTeam", fields: [awayTeamId], references: [id])
+  playerStats        PlayerGameStat[]
+  liveEvents         LiveEvent[]
+  analyticsSnapshots AnalyticsSnapshot[]
+
+  @@index([homeTeamId])
+  @@index([awayTeamId])
+  @@index([gameDate])
+  @@map("games")
+}
+
+model PlayerGameStat {
+  id                        Int      @id @default(autoincrement())
+  gameId                    Int      @map("game_id")
+  playerId                  Int      @map("player_id")
+  teamId                    Int      @map("team_id")
+  minutesPlayed             Float    @default(0) @map("minutes_played")
+  points                    Int      @default(0)
+  rebounds                  Int      @default(0)
+  assists                   Int      @default(0)
+  steals                    Int      @default(0)
+  blocks                    Int      @default(0)
+  turnovers                 Int      @default(0)
+  fieldGoalsMade            Int      @default(0) @map("field_goals_made")
+  fieldGoalsAttempted       Int      @default(0) @map("field_goals_attempted")
+  threePointsMade           Int      @default(0) @map("three_points_made")
+  threePointsAttempted      Int      @default(0) @map("three_points_attempted")
+  freeThrowsMade            Int      @default(0) @map("free_throws_made")
+  freeThrowsAttempted       Int      @default(0) @map("free_throws_attempted")
+  plusMinus                 Int      @default(0) @map("plus_minus")
+  createdAt                 DateTime @default(now()) @map("created_at")
+  updatedAt                 DateTime @updatedAt @map("updated_at")
+  game                      Game     @relation(fields: [gameId], references: [id], onDelete: Cascade)
+  player                    Player   @relation(fields: [playerId], references: [id], onDelete: Cascade)
+  team                      Team     @relation(fields: [teamId], references: [id])
+
+  @@unique([gameId, playerId])
+  @@index([teamId])
+  @@index([playerId])
+  @@map("player_game_stats")
+}
+
+model LiveEvent {
+  id               Int      @id @default(autoincrement())
+  gameId           Int      @map("game_id")
+  playerId         Int?     @map("player_id")
+  eventType        String   @map("event_type")
+  eventDescription String   @map("event_description")
+  period           Int
+  clock            String?
+  createdAt        DateTime @default(now()) @map("created_at")
+  game             Game     @relation(fields: [gameId], references: [id], onDelete: Cascade)
+  player           Player?  @relation(fields: [playerId], references: [id], onDelete: SetNull)
+
+  @@index([gameId])
+  @@index([playerId])
+  @@map("live_events")
+}
+
+model AnalyticsSnapshot {
+  id           Int      @id @default(autoincrement())
+  gameId       Int      @map("game_id")
+  playerId     Int      @map("player_id")
+  impactScore  Float    @map("impact_score")
+  fantasyScore Float    @map("fantasy_score")
+  usageRate    Float    @map("usage_rate")
+  createdAt    DateTime @default(now()) @map("created_at")
+  game         Game     @relation(fields: [gameId], references: [id], onDelete: Cascade)
+  player       Player   @relation(fields: [playerId], references: [id], onDelete: Cascade)
+
+  @@unique([gameId, playerId])
+  @@index([playerId])
+  @@map("analytics_snapshots")
+}

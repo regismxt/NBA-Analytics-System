@@ -1,0 +1,8 @@
+[
+  {"external_id":"mock-atl","name":"Comets","abbreviation":"ATL","city":"Atlanta","conference":"East","division":"Southeast"},
+  {"external_id":"mock-bos","name":"Harbor","abbreviation":"BOS","city":"Boston","conference":"East","division":"Atlantic"},
+  {"external_id":"mock-chi","name":"Steel","abbreviation":"CHI","city":"Chicago","conference":"East","division":"Central"},
+  {"external_id":"mock-dal","name":"Stallions","abbreviation":"DAL","city":"Dallas","conference":"West","division":"Southwest"},
+  {"external_id":"mock-den","name":"Peaks","abbreviation":"DEN","city":"Denver","conference":"West","division":"Northwest"},
+  {"external_id":"mock-la","name":"Lights","abbreviation":"LAL","city":"Los Angeles","conference":"West","division":"Pacific"}
+]

@@ -1,0 +1,50 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: nba-live-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-nba_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-nba_password}
+      POSTGRES_DB: ${POSTGRES_DB:-nba_live_analytics}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-nba_user} -d ${POSTGRES_DB:-nba_live_analytics}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: ./backend
+    container_name: nba-live-backend
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-nba_user}:${POSTGRES_PASSWORD:-nba_password}@postgres:5432/${POSTGRES_DB:-nba_live_analytics}?schema=public
+      BACKEND_PORT: 4000
+      NODE_ENV: production
+      CORS_ORIGIN: http://localhost:5173
+    ports:
+      - "4000:4000"
+    command: sh -c "npx prisma migrate deploy && npm run seed && node dist/server.js"
+
+  frontend:
+    build:
+      context: ./frontend
+    container_name: nba-live-frontend
+    restart: unless-stopped
+    depends_on:
+      - backend
+    environment:
+      VITE_API_URL: http://localhost:4000/api
+    ports:
+      - "5173:5173"
+
+volumes:
+  postgres-data:
