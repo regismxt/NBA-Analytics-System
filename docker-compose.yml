@@ -29,6 +29,7 @@ services:
       DATABASE_URL: postgresql://${POSTGRES_USER:-nba_user}:${POSTGRES_PASSWORD:-nba_password}@postgres:5432/${POSTGRES_DB:-nba_live_analytics}?schema=public
       BACKEND_PORT: 4000
       NODE_ENV: production
+      SEED_MODE: demo
       CORS_ORIGIN: http://localhost:5173
     ports:
       - "4000:4000"

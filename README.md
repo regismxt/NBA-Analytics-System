@@ -1,6 +1,25 @@
-# NBA-Analytics-System
+# CourtVision Analytics
 
-# NBA Live Analytics Dashboard
+> Fundação fullstack para análise de dados da NBA. A Fase 1 de estabilização está pronta para revisão.
+
+## Status técnico
+
+O seed de dados demonstrativos é opt-in, não executa exclusões globais e grava a carga em uma transação serializada. Para carregar o mock localmente, defina `SEED_MODE=demo` antes de `npm run db:seed`.
+
+No PowerShell:
+
+```powershell
+$env:SEED_MODE = "demo"
+npm run db:seed
+```
+
+No Bash:
+
+```bash
+SEED_MODE=demo npm run db:seed
+```
+
+Os resultados verificados e as limitações atuais estão em [`docs/TECHNICAL_AUDIT.md`](docs/TECHNICAL_AUDIT.md). O roadmap de estabilização está em [`docs/ROADMAP.md`](docs/ROADMAP.md).
 
 Sistema fullstack para analise de estatisticas da NBA com PostgreSQL, Prisma, Express, React, dashboards e pipeline Python de dados mockados.
 
@@ -41,11 +60,11 @@ cp .env.example .env
 docker compose up -d postgres
 ```
 
-4. Execute migrations e seed:
+4. Execute migrations e, opcionalmente, o seed demonstrativo:
 
 ```bash
 npm run db:migrate
-npm run db:seed
+SEED_MODE=demo npm run db:seed
 ```
 
 5. Rode backend e frontend:
@@ -70,15 +89,27 @@ O backend aplica migrations, roda o seed e sobe a API. O frontend fica disponive
 
 ```bash
 npm run db:migrate
-npm run db:seed
+SEED_MODE=demo npm run db:seed
 ```
 
 Tambem e possivel rodar diretamente no workspace:
 
 ```bash
 npm --workspace backend run prisma:migrate
-npm --workspace backend run seed
+SEED_MODE=demo npm --workspace backend run seed
 ```
+
+Sem `SEED_MODE=demo`, o comando de seed encerra sem abrir uma carga ou modificar dados.
+
+## Verificações
+
+```bash
+npm run typecheck
+npm run build
+npm --workspace backend test
+```
+
+O frontend ainda não possui suíte própria de testes automatizados. O build pode emitir um alerta não bloqueante para o bundle principal acima de 500 kB.
 
 ## Pipeline Python
 

@@ -1,4 +1,4 @@
-import { PrismaClient } from "@prisma/client";
+import { PrismaClient, type Prisma } from "@prisma/client";
 
 const prisma = new PrismaClient();
 
@@ -111,17 +111,16 @@ function impactScore(stat: ReturnType<typeof statLine>) {
   );
 }
 
-async function main() {
-  await prisma.analyticsSnapshot.deleteMany();
-  await prisma.liveEvent.deleteMany();
-  await prisma.playerGameStat.deleteMany();
-  await prisma.game.deleteMany();
-  await prisma.player.deleteMany();
-  await prisma.team.deleteMany();
+async function seedDemoData(client: Prisma.TransactionClient) {
+  // O seed demonstrativo nunca remove dados. As chaves externas permitem reexecução segura.
 
   const teamMap = new Map<string, number>();
   for (const team of teams) {
-    const created = await prisma.team.create({ data: team });
+    const created = await client.team.upsert({
+      where: { externalId: team.externalId },
+      update: team,
+      create: team
+    });
     teamMap.set(team.abbreviation, created.id);
   }
 
@@ -130,19 +129,22 @@ async function main() {
     const roster = playerNames[team.abbreviation];
     const ids: number[] = [];
     for (const [index, [firstName, lastName, position]] of roster.entries()) {
-      const player = await prisma.player.create({
-        data: {
-          externalId: `mock-${team.abbreviation.toLowerCase()}-${index + 1}`,
-          firstName,
-          lastName,
-          fullName: `${firstName} ${lastName}`,
-          position,
-          teamId: teamMap.get(team.abbreviation)!,
-          height: position === "C" ? "6-11" : position === "PF" ? "6-9" : "6-5",
-          weight: position === "C" ? 255 : position === "PF" ? 235 : 205,
-          birthDate: new Date(Date.UTC(1995 + index, index % 12, 12 + index)),
-          active: true
-        }
+      const playerData = {
+        externalId: `mock-${team.abbreviation.toLowerCase()}-${index + 1}`,
+        firstName,
+        lastName,
+        fullName: `${firstName} ${lastName}`,
+        position,
+        teamId: teamMap.get(team.abbreviation)!,
+        height: position === "C" ? "6-11" : position === "PF" ? "6-9" : "6-5",
+        weight: position === "C" ? 255 : position === "PF" ? 235 : 205,
+        birthDate: new Date(Date.UTC(1995 + index, index % 12, 12 + index)),
+        active: true
+      };
+      const player = await client.player.upsert({
+        where: { externalId: playerData.externalId },
+        update: playerData,
+        create: playerData
       });
       ids.push(player.id);
     }
@@ -157,74 +159,104 @@ async function main() {
     const homeScore = gameSeed.status === "SCHEDULED" ? 0 : homeStats.reduce((sum, row) => sum + row.stat.points, 0);
     const awayScore = gameSeed.status === "SCHEDULED" ? 0 : awayStats.reduce((sum, row) => sum + row.stat.points, 0);
 
-    const game = await prisma.game.create({
-      data: {
-        externalId: gameSeed.externalId,
-        homeTeamId: teamMap.get(gameSeed.home)!,
-        awayTeamId: teamMap.get(gameSeed.away)!,
-        gameDate: new Date(gameSeed.date),
-        status: gameSeed.status,
-        season: "2025-26",
-        homeScore,
-        awayScore,
-        period: gameSeed.period,
-        clock: gameSeed.clock
-      }
+    const gameData = {
+      externalId: gameSeed.externalId,
+      homeTeamId: teamMap.get(gameSeed.home)!,
+      awayTeamId: teamMap.get(gameSeed.away)!,
+      gameDate: new Date(gameSeed.date),
+      status: gameSeed.status,
+      season: "2025-26",
+      homeScore,
+      awayScore,
+      period: gameSeed.period,
+      clock: gameSeed.clock
+    };
+    const game = await client.game.upsert({
+      where: { externalId: gameData.externalId },
+      update: gameData,
+      create: gameData
     });
 
     if (gameSeed.status !== "SCHEDULED") {
       for (const row of [...homeStats, ...awayStats]) {
         const teamId = homePlayers.includes(row.playerId) ? teamMap.get(gameSeed.home)! : teamMap.get(gameSeed.away)!;
-        await prisma.playerGameStat.create({
-          data: {
-            gameId: game.id,
-            playerId: row.playerId,
-            teamId,
-            ...row.stat
-          }
+        const statData = {
+          gameId: game.id,
+          playerId: row.playerId,
+          teamId,
+          ...row.stat
+        };
+        await client.playerGameStat.upsert({
+          where: { gameId_playerId: { gameId: game.id, playerId: row.playerId } },
+          update: statData,
+          create: statData
         });
 
-        await prisma.analyticsSnapshot.create({
-          data: {
-            gameId: game.id,
-            playerId: row.playerId,
-            impactScore: impactScore(row.stat),
-            fantasyScore: row.stat.points + row.stat.rebounds * 1.2 + row.stat.assists * 1.5 + row.stat.steals * 3 + row.stat.blocks * 3 - row.stat.turnovers,
-            usageRate: Number((18 + ((gameIndex + row.playerId) % 14)).toFixed(2))
-          }
+        const snapshotData = {
+          gameId: game.id,
+          playerId: row.playerId,
+          impactScore: impactScore(row.stat),
+          fantasyScore: row.stat.points + row.stat.rebounds * 1.2 + row.stat.assists * 1.5 + row.stat.steals * 3 + row.stat.blocks * 3 - row.stat.turnovers,
+          usageRate: Number((18 + ((gameIndex + row.playerId) % 14)).toFixed(2))
+        };
+        await client.analyticsSnapshot.upsert({
+          where: { gameId_playerId: { gameId: game.id, playerId: row.playerId } },
+          update: snapshotData,
+          create: snapshotData
         });
       }
 
       const topHomePlayer = [...homeStats].sort((a, b) => b.stat.points - a.stat.points)[0];
       const topAwayPlayer = [...awayStats].sort((a, b) => b.stat.points - a.stat.points)[0];
-      await prisma.liveEvent.createMany({
-        data: [
-          {
-            gameId: game.id,
-            playerId: topHomePlayer.playerId,
-            eventType: "SCORE",
-            eventDescription: "Home scorer attacks the rim",
-            period: Math.max(1, gameSeed.period),
-            clock: gameSeed.clock
-          },
-          {
-            gameId: game.id,
-            playerId: topAwayPlayer.playerId,
-            eventType: "THREE_POINTER",
-            eventDescription: "Away scorer hits from the corner",
-            period: Math.max(1, gameSeed.period),
-            clock: gameSeed.clock
-          }
-        ]
-      });
+      for (const eventData of [
+        {
+          gameId: game.id,
+          playerId: topHomePlayer.playerId,
+          eventType: "SCORE",
+          eventDescription: "Home scorer attacks the rim",
+          period: Math.max(1, gameSeed.period),
+          clock: gameSeed.clock
+        },
+        {
+          gameId: game.id,
+          playerId: topAwayPlayer.playerId,
+          eventType: "THREE_POINTER",
+          eventDescription: "Away scorer hits from the corner",
+          period: Math.max(1, gameSeed.period),
+          clock: gameSeed.clock
+        }
+      ]) {
+        const existingEvent = await client.liveEvent.findFirst({
+          where: { gameId: eventData.gameId, playerId: eventData.playerId, eventType: eventData.eventType }
+        });
+        if (!existingEvent) await client.liveEvent.create({ data: eventData });
+      }
     }
   }
 }
 
+async function main() {
+  if (process.env.SEED_MODE !== "demo") {
+    console.log("Seed ignorado. Defina SEED_MODE=demo para carregar dados demonstrativos.");
+    return false;
+  }
+
+  await prisma.$transaction(
+    async (client) => {
+      // Serializa execuções concorrentes para manter a deduplicação dos eventos atômica.
+      await client.$executeRaw`SELECT pg_advisory_xact_lock(20261026)`;
+      await seedDemoData(client);
+    },
+    { maxWait: 10_000, timeout: 30_000 }
+  );
+
+  return true;
+}
+
 main()
-  .then(async () => {
+  .then(async (executed) => {
     await prisma.$disconnect();
-    console.log("Seed completed with mock NBA analytics data.");
+    console.log(executed ? "Seed completed with mock NBA analytics data." : "Seed skipped safely.");
   })
   .catch(async (error) => {
     console.error(error);
